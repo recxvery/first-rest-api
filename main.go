@@ -1,17 +1,18 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
+	"log"
+	"rest-api/http"
+	"rest-api/todo"
 )
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(r.URL.Path)
-}
-
 func main() {
-	http.HandleFunc("/tasks/", handler)
+	todolist := todo.NewList()
 
-	err := http.ListenAndServe(":9091", nil)
-	_ = err
+	httphandlers := http.NewHTTPHandlers(todolist)
+	httpserver := http.NewHTTPServer(httphandlers)
+
+	if err := httpserver.StartServer(); err != nil {
+		log.Println(err.Error())
+	}
 }

@@ -15,7 +15,7 @@ type HTTPHandlers struct {
 	todoList *todo.List
 }
 
-func newHTTPHandlers(todoList *todo.List) *HTTPHandlers {
+func NewHTTPHandlers(todoList *todo.List) *HTTPHandlers {
 	return &HTTPHandlers{
 		todoList: todoList,
 	}
@@ -42,30 +42,24 @@ func (h *HTTPHandlers) HandleCreateTask(w http.ResponseWriter, r *http.Request) 
 		}
 
 		http.Error(w, errDTO.ToJSON(), http.StatusBadRequest)
+		return
 	}
 
 	if err := taskDTO.ValidateForCreate(); err != nil {
-		errDto := ErrorDTO {
+		errDto := ErrorDTO{
 			Message: err.Error(),
-			Time: time.Now(),
+			Time:    time.Now(),
 		}
 
 		http.Error(w, errDto.ToJSON(), http.StatusBadRequest)
+		return
 	}
 
 	todoTask := todo.NewTask(taskDTO.Title, taskDTO.Description)
-	if err := h.todoList.AddTask(todoTask); err  != nil {
-		errDto := ErrorDTO {
-			Message: err.Error(),
-			Time: time.Now(),
-		}
-		if errors.Is(err, todo.ErrTaskAlradyExists) {
-			http.Error(w, errDto.ToJSON(), http.StatusConflict)
-		} else {
-			http.Error(w, errDto.ToJSON(), http.StatusInternalServerError)
-		}
-
+	if err := h.todoList.AddTask(todoTask); err != nil {
+		errorHandle(w, err)
 		return
+
 	}
 
 	b, err := json.MarshalIndent(todoTask, "", "	")
@@ -96,7 +90,23 @@ func (h *HTTPHandlers) HandleCreateTask(w http.ResponseWriter, r *http.Request) 
 func (h *HTTPHandlers) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 	title := mux.Vars(r)["title"]
 
-	h.todoList
+	task, err := h.todoList.GetTask(title)
+	if err != nil {
+		errorHandle(w, err)
+
+		return
+	}
+
+	b, err := json.MarshalIndent(task, "", "	")
+	if err != nil {
+		panic(err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(b); err != nil {
+		log.Println(err)
+		return
+	}
 }
 
 /*
@@ -112,7 +122,19 @@ func (h *HTTPHandlers) HandleGetTask(w http.ResponseWriter, r *http.Request) {
 */
 
 func (h *HTTPHandlers) HandleGetAllTasks(w http.ResponseWriter, r *http.Request) {
+	tasks := h.todoList.ListTasks()
 
+	b, err := json.MarshalIndent(tasks, "", "    ")
+	if err != nil {
+		panic(err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(b); err != nil {
+		log.Println(err)
+
+		return
+	}
 }
 
 /*
@@ -128,7 +150,18 @@ func (h *HTTPHandlers) HandleGetAllTasks(w http.ResponseWriter, r *http.Request)
 */
 
 func (h *HTTPHandlers) HandleGetUncompletedTasks(w http.ResponseWriter, r *http.Request) {
+	uncompletedTasks := h.todoList.ListUncompleteTasks()
 
+	data, err := json.MarshalIndent(uncompletedTasks, "", "    ")
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := w.Write(data); err != nil {
+		log.Println(err)
+
+		return
+	}
 }
 
 /*
@@ -146,7 +179,41 @@ failed:
 	-response body: json err message + time
 */
 func (h *HTTPHandlers) HandleMakeTaskCompleted(w http.ResponseWriter, r *http.Request) {
+	var CompleteDto CompleteDTO
+	if err := json.NewDecoder(r.Body).Decode(&CompleteDto); err != nil {
+		errDTO := ErrorDTO{
+			Message: err.Error(),
+			Time:    time.Now(),
+		}
 
+		http.Error(w, errDTO.ToJSON(), http.StatusBadRequest)
+	}
+
+	title := mux.Vars(r)["title"]
+	var (
+		changedTask todo.Task
+		err         error
+	)
+	if CompleteDto.Complete {
+		changedTask, err = h.todoList.CompleteTask(title)
+	} else {
+		changedTask, err = h.todoList.UncompleteTask(title)
+	}
+
+	if err != nil {
+		errorHandle(w, err)
+
+		return
+	}
+
+	b, err := json.MarshalIndent(changedTask, "", "    ")
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := w.Write(b); err != nil {
+		log.Println(err)
+	}
 }
 
 /*
@@ -164,5 +231,28 @@ failed:
 	-response body: json err message + time
 */
 func (h *HTTPHandlers) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
+	title := mux.Vars(r)["title"]
 
+	if err := h.todoList.DeleteTask(title); err != nil {
+		errorHandle(w, err)
+
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func errorHandle(w http.ResponseWriter, err error) {
+	errDTO := ErrorDTO{
+		Message: err.Error(),
+		Time:    time.Now(),
+	}
+	switch {
+	case errors.Is(err, todo.ErrTaskAlradyExists):
+		http.Error(w, errDTO.ToJSON(), http.StatusConflict)
+	case errors.Is(err, todo.ErrTaskNotFound):
+		http.Error(w, errDTO.ToJSON(), http.StatusNotFound)
+	default:
+		http.Error(w, errDTO.ToJSON(), http.StatusInternalServerError)
+	}
 }

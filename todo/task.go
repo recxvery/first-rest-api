@@ -9,7 +9,7 @@ type Task struct {
 	Completed   bool
 
 	CreatedAt   time.Time
-	CompletedAt *time.Time
+	CompletedAt *time.Time //поле является указателем, т.к. в json если мы не выполнили задачу будет равен null, что для клиента будет удобно.
 }
 
 func NewTask(title string, description string) Task {
@@ -23,10 +23,17 @@ func NewTask(title string, description string) Task {
 	}
 }
 
-func (t *Task) Done() {
+func (t *Task) Complete() {
 	completeTime := time.Now()
 
 	t.Completed = true
 	t.CompletedAt = &completeTime
 }
 
+
+func (t *Task) Uncomplete() {
+	completeTime := time.Now()
+
+	t.Completed = false
+	t.CompletedAt = &completeTime
+}

@@ -16,6 +16,16 @@ type ErrorDTO struct {
 	Time    time.Time
 }
 
+/*
+{
+	"complete": true
+}
+*/
+
+type CompleteDTO struct {
+	Complete bool
+}
+
 func (e ErrorDTO) ToJSON() string {
 	d, err := json.MarshalIndent(e, "", "	")
 	if err != nil {
